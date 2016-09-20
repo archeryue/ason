@@ -1,0 +1,18 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/archeryue/mycode/cjson/cjson.c
+stdlib.h
+-
+assert.h
+-
+cjson.h
+/Users/archeryue/mycode/cjson/cjson.h
+
+/Users/archeryue/mycode/cjson/cjson.h
+
