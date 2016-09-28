@@ -42,35 +42,26 @@ static void test_parse_true() {
     EXPECT_EQ_INT(JSON_TRUE, json_get_type(&v));
 }
 
+#define TEST_ERROR(error, json) \
+    do { \
+        json_value v; \
+        v.type = JSON_FALSE; \
+        EXPECT_EQ_INT(error, json_parse(&v, json)); \
+        EXPECT_EQ_INT(JSON_NULL, json_get_type(&v)); \
+    } while(0)
+
 static void test_parse_expect_value() {
-    json_value v;
-
-    v.type = JSON_FALSE;
-    EXPECT_EQ_INT(PARSE_EXPECT_VALUE, json_parse(&v, ""));
-    EXPECT_EQ_INT(JSON_NULL, json_get_type(&v));
-
-    v.type = JSON_FALSE;
-    EXPECT_EQ_INT(PARSE_EXPECT_VALUE, json_parse(&v, " "));
-    EXPECT_EQ_INT(JSON_NULL, json_get_type(&v));
+    TEST_ERROR(PARSE_EXPECT_VALUE, "");
+    TEST_ERROR(PARSE_EXPECT_VALUE, " ");
 }
 
 static void test_parse_invalid_value() {
-    json_value v;
-
-    v.type = JSON_FALSE;
-    EXPECT_EQ_INT(PARSE_INVALID_VALUE, json_parse(&v, "nul"));
-    EXPECT_EQ_INT(JSON_NULL, json_get_type(&v));
-
-    v.type = JSON_FALSE;
-    EXPECT_EQ_INT(PARSE_INVALID_VALUE, json_parse(&v, " ?"));
-    EXPECT_EQ_INT(JSON_NULL, json_get_type(&v));
+    TEST_ERROR(PARSE_INVALID_VALUE, "nul");
+    TEST_ERROR(PARSE_INVALID_VALUE, " ? ");
 }
 
 static void test_parse_root_not_singular() {
-    json_value v;
-    v.type = JSON_FALSE;
-    EXPECT_EQ_INT(PARSE_ROOT_NOT_SINGULAR, json_parse(&v, "null true"));
-    EXPECT_EQ_INT(JSON_NULL, json_get_type(&v));
+    TEST_ERROR(PARSE_ROOT_NOT_SINGULAR, "null true");
 }
 
 static void test_parse() {
