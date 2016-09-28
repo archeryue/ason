@@ -17,7 +17,7 @@ typedef struct {
 
 enum {
     PARSE_OK = 0,
-    PARSE_EXCEPT_VALUE,
+    PARSE_EXPECT_VALUE,
     PARSE_INVALID_VALUE,
     PARSE_ROOT_NOT_SINGULAR
 };
