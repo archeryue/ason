@@ -1,1 +1,1 @@
-/Library/Developer/CommandLineTools/usr/bin/cc   -ansi -pedantic -Wall -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names  CMakeFiles/cjson_test.dir/test.c.o  -o cjson_test  libcjson.a 
+/Library/Developer/CommandLineTools/usr/bin/cc  -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names  CMakeFiles/cjson_test.dir/test.c.o  -o cjson_test  libcjson.a 

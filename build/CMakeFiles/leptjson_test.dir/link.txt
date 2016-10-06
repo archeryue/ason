@@ -1,1 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/cc   -ansi -pedantic -Wall -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names  CMakeFiles/leptjson_test.dir/test.c.o  -o leptjson_test  libleptjson.a 
