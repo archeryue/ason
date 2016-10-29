@@ -1,4 +1,0 @@
-/Users/archeryue/mycode/cjson/build/CMakeFiles/cjson_test.dir
-/Users/archeryue/mycode/cjson/build/CMakeFiles/edit_cache.dir
-/Users/archeryue/mycode/cjson/build/CMakeFiles/rebuild_cache.dir
-/Users/archeryue/mycode/cjson/build/CMakeFiles/cjson.dir
