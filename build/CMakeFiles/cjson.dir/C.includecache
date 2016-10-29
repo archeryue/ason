@@ -15,6 +15,8 @@ errno.h
 -
 math.h
 -
+string.h
+-
 cjson.h
 /Users/archeryue/mycode/cjson/cjson.h
 
