@@ -3,10 +3,10 @@
 #include <errno.h>  /* errno, ERANGE */
 #include <math.h>   /* HUGE_VAL */
 #include <string.h> /* memcpy */
-#include "cjson.h"
+#include "ason.h"
 
-#ifndef JSON_PARSE_STACK_INIT_SIZE
-#define JSON_PARSE_STACK_INIT_SIZE 256
+#ifndef ASON_PARSE_STACK_INIT_SIZE
+#define ASON_PARSE_STACK_INIT_SIZE 256
 #endif
 
 #define EXPECT(c, ch) do { assert(*c->json == ch); c->json++; } while (0)
@@ -15,14 +15,14 @@ typedef struct {
     const char* json;
     char* stack;
     size_t size, top;
-} json_context;
+} ason_context;
 
-static void* json_context_push(json_context* c, size_t size) {
+static void* ason_context_push(ason_context* c, size_t size) {
     void* ret;
     assert(c != NULL && size > 0);
     if (c->top + size >= c->size) {
         if (c->size == 0)
-            c->size = JSON_PARSE_STACK_INIT_SIZE;
+            c->size = ASON_PARSE_STACK_INIT_SIZE;
         while (c->top + size >= c->size)
             c->size += c->size >> 1; /* size * 1.5 */
         c->stack = (char*)realloc(c->stack, c->size);
@@ -32,85 +32,85 @@ static void* json_context_push(json_context* c, size_t size) {
     return ret;
 }
 
-static void* json_context_pop(json_context* c, size_t size) {
+static void* ason_context_pop(ason_context* c, size_t size) {
     assert(c != NULL && size >= 0 && c->top >= size);
     c->top -= size;
     return c->stack + c->top;
 }
 
-static void json_parse_whitespace(json_context* c) {
+static void ason_parse_whitespace(ason_context* c) {
     const char* p = c->json;
     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
         p++;
     c->json = p;
 }
 
-static int json_parse_null(json_context* c, json_value* v) {
+static int ason_parse_null(ason_context* c, ason_value* v) {
     EXPECT(c, 'n');
     if (c->json[0] != 'u' || c->json[1] != 'l' || c->json[2] != 'l') {
-        return PARSE_INVALID_VALUE;
+        return ASON_PARSE_INVALID_VALUE;
     }
     c->json += 3;
-    v->type = JSON_NULL;
-    return PARSE_OK;
+    v->type = ASON_NULL;
+    return ASON_PARSE_OK;
 }
 
-static int json_parse_false(json_context* c, json_value* v) {
+static int ason_parse_false(ason_context* c, ason_value* v) {
     EXPECT(c, 'f');
     if (c->json[0] != 'a' || c->json[1] != 'l' || c->json[2] != 's' || c->json[3] != 'e') {
-        return PARSE_INVALID_VALUE;
+        return ASON_PARSE_INVALID_VALUE;
     }
     c->json += 4;
-    v->type = JSON_FALSE;
-    return PARSE_OK;
+    v->type = ASON_FALSE;
+    return ASON_PARSE_OK;
 }
 
-static int json_parse_true(json_context* c, json_value* v) {
+static int ason_parse_true(ason_context* c, ason_value* v) {
     EXPECT(c, 't');
     if (c->json[0] != 'r' || c->json[1] != 'u' || c->json[2] != 'e') {
-        return PARSE_INVALID_VALUE;
+        return ASON_PARSE_INVALID_VALUE;
     }
     c->json += 3;
-    v->type = JSON_TRUE;
-    return PARSE_OK;
+    v->type = ASON_TRUE;
+    return ASON_PARSE_OK;
 }
 
 #define ISDIGIT(ch) ((ch) >= '0' && (ch) <= '9')
 #define ISDIGIT1TO9(ch) ((ch) >= '1' && (ch) <= '9')
 
-static int json_parse_number(json_context* c, json_value* v) {
+static int ason_parse_number(ason_context* c, ason_value* v) {
     const char* p = c->json;
     if (*p == '-') p++;
     if (*p == '0') p++;
     else {
-        if (!ISDIGIT1TO9(*p)) return PARSE_INVALID_VALUE;
+        if (!ISDIGIT1TO9(*p)) return ASON_PARSE_INVALID_VALUE;
         for (p++; ISDIGIT(*p); p++);
     }
     if (*p == '.') {
         p++;
-        if (!ISDIGIT(*p)) return PARSE_INVALID_VALUE;
+        if (!ISDIGIT(*p)) return ASON_PARSE_INVALID_VALUE;
         for (p++; ISDIGIT(*p); p++);
     }
     if (*p == 'e' || *p == 'E') {
         p++;
         if (*p == '+' || *p == '-') p++;
-        if (!ISDIGIT(*p)) return PARSE_INVALID_VALUE;
+        if (!ISDIGIT(*p)) return ASON_PARSE_INVALID_VALUE;
         for (p++; ISDIGIT(*p); p++);
     }
     errno = 0;
     v->u.num = strtod(c->json, NULL);
     if (errno == ERANGE && (v->u.num == HUGE_VAL || v->u.num == -HUGE_VAL)) {
-        return PARSE_NUMBER_TOO_BIG;
+        return ASON_PARSE_NUMBER_TOO_BIG;
     }
     c->json = p;
-    v->type = JSON_NUMBER;
-    return PARSE_OK;
+    v->type = ASON_NUMBER;
+    return ASON_PARSE_OK;
 }
 
-#define PUTC(c, ch) do { *(char*)json_context_push(c, sizeof(char)) = (ch);} while(0)
+#define PUTC(c, ch) do { *(char*)ason_context_push(c, sizeof(char)) = (ch);} while(0)
 #define STRING_ERROR(ret) do { c->top = head; return ret; } while(0)
 
-static const char* json_parse_hex4(const char* p, unsigned* u) {
+static const char* ason_parse_hex4(const char* p, unsigned* u) {
     int i;
     *u = 0;
     for (i=0; i<4; i++) {
@@ -124,7 +124,7 @@ static const char* json_parse_hex4(const char* p, unsigned* u) {
     return p;
 }
 
-static void json_encode_utf8(json_context* c, unsigned u) {
+static void ason_encode_utf8(ason_context* c, unsigned u) {
     if (u <= 0x7F)
         PUTC(c, u & 0xFF);
     else if (u <= 0x7FF) {
@@ -145,7 +145,7 @@ static void json_encode_utf8(json_context* c, unsigned u) {
     }
 }
 
-static int json_parse_string(json_context* c, json_value* v) {
+static int ason_parse_string(ason_context* c, ason_value* v) {
     size_t head = c->top, len;
     unsigned u,ul;
     EXPECT(c, '"');
@@ -155,9 +155,9 @@ static int json_parse_string(json_context* c, json_value* v) {
         switch (ch) {
             case '"':
                 len = c->top - head;
-                json_set_string(v, (char*)json_context_pop(c, len), len);
+                ason_set_string(v, (char*)ason_context_pop(c, len), len);
                 c->json = p;
-                return PARSE_OK;
+                return ASON_PARSE_OK;
             case '\\':
                 switch (*p++) {
                     case '\\': PUTC(c, '\\'); break;
@@ -169,59 +169,59 @@ static int json_parse_string(json_context* c, json_value* v) {
                     case 'r':  PUTC(c, '\r'); break;
                     case 't':  PUTC(c, '\t'); break;
                     case 'u':
-                        if (!(p = json_parse_hex4(p, &u)))
-                            STRING_ERROR(PARSE_INVALID_UNICODE_HEX);
+                        if (!(p = ason_parse_hex4(p, &u)))
+                            STRING_ERROR(ASON_PARSE_INVALID_UNICODE_HEX);
                         if (u >= 0xD800 && u <= 0xDBFF) { /* surrogate pair */
                             if (*p != '\\' || *(p+1) != 'u')
-                                STRING_ERROR(PARSE_INVALID_UNICODE_SURROGATE);
+                                STRING_ERROR(ASON_PARSE_INVALID_UNICODE_SURROGATE);
                             p+=2;
-                            if (!(p = json_parse_hex4(p, &ul)))
-                                STRING_ERROR(PARSE_INVALID_UNICODE_HEX);
+                            if (!(p = ason_parse_hex4(p, &ul)))
+                                STRING_ERROR(ASON_PARSE_INVALID_UNICODE_HEX);
                             if (ul < 0xDC00 || ul > 0xDFFF)
-                                STRING_ERROR(PARSE_INVALID_UNICODE_SURROGATE);
+                                STRING_ERROR(ASON_PARSE_INVALID_UNICODE_SURROGATE);
                             u = (((u - 0xD800) << 10) | (ul - 0xDC00)) + 0x10000;
                         }
-                        json_encode_utf8(c, u);
+                        ason_encode_utf8(c, u);
                         break;
                     default:
-                        STRING_ERROR(PARSE_INVALID_STRING_ESCAPE);
+                        STRING_ERROR(ASON_PARSE_INVALID_STRING_ESCAPE);
                 }
                 break;
             case '\0':
-                STRING_ERROR(PARSE_MISS_QUOTATION_MARK);
+                STRING_ERROR(ASON_PARSE_MISS_QUOTATION_MARK);
             default:
                 if ((unsigned char)ch < 0x20)
-                    STRING_ERROR(PARSE_INVALID_STRING_CHAR);
+                    STRING_ERROR(ASON_PARSE_INVALID_STRING_CHAR);
                 PUTC(c, ch);
         }
     }
 }
 
-static int json_parse_value(json_context* c, json_value* v) {
+static int ason_parse_value(ason_context* c, ason_value* v) {
     switch(*c->json) {
-        case 'n':  return json_parse_null(c, v);
-        case 'f':  return json_parse_false(c, v);
-        case 't':  return json_parse_true(c, v);
-        default :  return json_parse_number(c, v);
-        case '"':  return json_parse_string(c, v);
-        case '\0': return PARSE_EXPECT_VALUE;
+        case 'n':  return ason_parse_null(c, v);
+        case 'f':  return ason_parse_false(c, v);
+        case 't':  return ason_parse_true(c, v);
+        default :  return ason_parse_number(c, v);
+        case '"':  return ason_parse_string(c, v);
+        case '\0': return ASON_PARSE_EXPECT_VALUE;
     }
 }
 
-int json_parse(json_value* v, const char* json) {
-    json_context c;
+int ason_parse(ason_value* v, const char* json) {
+    ason_context c;
     int ret;
     c.json = json;
     c.stack = NULL;
     c.size = c.top = 0;
     assert(v != NULL);
-    json_init(v);
-    json_parse_whitespace(&c);
-    if ((ret = json_parse_value(&c, v)) == PARSE_OK) {
-        json_parse_whitespace(&c);
+    ason_init(v);
+    ason_parse_whitespace(&c);
+    if ((ret = ason_parse_value(&c, v)) == ASON_PARSE_OK) {
+        ason_parse_whitespace(&c);
         if (*c.json != '\0') {
-            v->type = JSON_NULL;
-            ret = PARSE_ROOT_NOT_SINGULAR;
+            v->type = ASON_NULL;
+            ret = ASON_PARSE_ROOT_NOT_SINGULAR;
         }
     }
     assert(c.top == 0);
@@ -229,57 +229,57 @@ int json_parse(json_value* v, const char* json) {
     return ret;
 }
 
-void json_free(json_value* v) {
+void ason_free(ason_value* v) {
     assert(v != NULL);
-    if (v->type == JSON_STRING)
+    if (v->type == ASON_STRING)
         free(v->u.str.s);
-    v->type = JSON_NULL;
+    v->type = ASON_NULL;
 }
 
-json_type json_get_type(const json_value* v) {
+ason_type ason_get_type(const ason_value* v) {
     assert(v != NULL);
     return v->type;
 }
 
-int json_get_boolean(const json_value* v) {
-    assert(v != NULL && (v->type == JSON_TRUE || v->type == JSON_FALSE));
-    return v->type == JSON_TRUE ? 1 : 0;
+int ason_get_boolean(const ason_value* v) {
+    assert(v != NULL && (v->type == ASON_TRUE || v->type == ASON_FALSE));
+    return v->type == ASON_TRUE ? 1 : 0;
 }
 
-void json_set_boolean(json_value* v, int b) {
+void ason_set_boolean(ason_value* v, int b) {
     assert(v != NULL);
-    json_free(v);
-    v->type = b ? JSON_TRUE : JSON_FALSE;
+    ason_free(v);
+    v->type = b ? ASON_TRUE : ASON_FALSE;
 }
 
-double json_get_number(const json_value* v) {
-    assert(v != NULL && v->type == JSON_NUMBER);
+double ason_get_number(const ason_value* v) {
+    assert(v != NULL && v->type == ASON_NUMBER);
     return v->u.num;
 }
 
-void json_set_number(json_value* v, double n) {
+void ason_set_number(ason_value* v, double n) {
     assert(v != NULL);
-    json_free(v);
+    ason_free(v);
     v->u.num = n;
-    v->type = JSON_NUMBER;
+    v->type = ASON_NUMBER;
 }
 
-const char* json_get_string(const json_value* v) {
-    assert(v != NULL && v->type == JSON_STRING);
+const char* ason_get_string(const ason_value* v) {
+    assert(v != NULL && v->type == ASON_STRING);
     return v->u.str.s;
 }
 
-size_t json_get_string_length(const json_value* v) {
-    assert(v != NULL && v->type == JSON_STRING);
+size_t ason_get_string_length(const ason_value* v) {
+    assert(v != NULL && v->type == ASON_STRING);
     return v->u.str.len;
 }
 
-void json_set_string(json_value* v, const char* s, size_t len) {
+void ason_set_string(ason_value* v, const char* s, size_t len) {
     assert(v != NULL && (s != NULL || len == 0));
-    json_free(v);
+    ason_free(v);
     v->u.str.s = (char*)malloc(len+1);
     memcpy(v->u.str.s, s, len);
     v->u.str.s[len] = '\0';
     v->u.str.len = len;
-    v->type = JSON_STRING;
+    v->type = ASON_STRING;
 }
