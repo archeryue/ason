@@ -161,14 +161,14 @@ static int ason_parse_string(ason_context* c, ason_value* v) {
             case '\\':
                 switch (*p++) {
                     case '\\': PUTC(c, '\\'); break;
-                    case '"': PUTC(c, '"'); break;
-                    case '/':  PUTC(c, '/' ); break;
-                    case 'b':  PUTC(c, '\b'); break;
-                    case 'f':  PUTC(c, '\f'); break;
-                    case 'n':  PUTC(c, '\n'); break;
-                    case 'r':  PUTC(c, '\r'); break;
-                    case 't':  PUTC(c, '\t'); break;
-                    case 'u':
+                    case '"' : PUTC(c, '"' ); break;
+                    case '/' : PUTC(c, '/' ); break;
+                    case 'b' : PUTC(c, '\b'); break;
+                    case 'f' : PUTC(c, '\f'); break;
+                    case 'n' : PUTC(c, '\n'); break;
+                    case 'r' : PUTC(c, '\r'); break;
+                    case 't' : PUTC(c, '\t'); break;
+                    case 'u' :
                         if (!(p = ason_parse_hex4(p, &u)))
                             STRING_ERROR(ASON_PARSE_INVALID_UNICODE_HEX);
                         if (u >= 0xDC00 && u <= 0xDFFF)
@@ -201,11 +201,11 @@ static int ason_parse_string(ason_context* c, ason_value* v) {
 
 static int ason_parse_value(ason_context* c, ason_value* v) {
     switch(*c->json) {
-        case 'n':  return ason_parse_null(c, v);
-        case 'f':  return ason_parse_false(c, v);
-        case 't':  return ason_parse_true(c, v);
-        default :  return ason_parse_number(c, v);
-        case '"':  return ason_parse_string(c, v);
+        case 'n' : return ason_parse_null(c, v);
+        case 'f' : return ason_parse_false(c, v);
+        case 't' : return ason_parse_true(c, v);
+        default  : return ason_parse_number(c, v);
+        case '"' : return ason_parse_string(c, v);
         case '\0': return ASON_PARSE_EXPECT_VALUE;
     }
 }
