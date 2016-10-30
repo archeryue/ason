@@ -19,12 +19,17 @@ static int test_pass = 0;
         } \
     } while(0)
 
-#define EXPECT_EQ_INT(expect, actual) EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%d")
-#define EXPECT_EQ_DOUBLE(expect, actual) EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%.17g")
-#define EXPECT_EQ_STRING(expect, actual, length) \
-    EXPECT_EQ_BASE(sizeof(expect) - 1 == length && memcmp(expect, actual, length) == 0, expect, actual, "%s")
 #define EXPECT_TRUE(actual) EXPECT_EQ_BASE((actual) != 0, "true", "false", "%s")
 #define EXPECT_FALSE(actual) EXPECT_EQ_BASE((actual) == 0, "false", "true", "%s")
+
+#define EXPECT_EQ_INT(expect, actual) \
+    EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%d")
+#define EXPECT_EQ_DOUBLE(expect, actual) \
+    EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%.17g")
+#define EXPECT_EQ_STRING(expect, actual, length) \
+    EXPECT_EQ_BASE(sizeof(expect) - 1 == length && memcmp(expect, actual, length) == 0, expect, actual, "%s")
+#define EXPECT_EQ_SIZE_T(expect, actual) \
+    EXPECT_EQ_BASE((expect) == (actual), (size_t)expect, (size_t)actual, "%zu")
 
 static void test_parse_null() {
     ason_value v;
@@ -117,6 +122,47 @@ static void test_parse_string() {
     TEST_STRING("\xF0\x9D\x84\x9E", "\"\\ud834\\udd1e\"");  /* G clef sign U+1D11E */
 }
 
+static void test_parse_array() {
+    size_t i, j;
+    ason_value v;
+
+    ason_init(&v);
+    EXPECT_EQ_INT(ASON_PARSE_OK, ason_parse(&v, "[ ]"));
+    EXPECT_EQ_INT(ASON_ARRAY, ason_get_type(&v));
+    EXPECT_EQ_SIZE_T(0, ason_get_array_size(&v));
+    ason_free(&v);
+
+    ason_init(&v);
+    EXPECT_EQ_INT(ASON_PARSE_OK, ason_parse(&v, "[ null , false , true , 123 , \"abc\" ]"));
+    EXPECT_EQ_INT(ASON_ARRAY, ason_get_type(&v));
+    EXPECT_EQ_SIZE_T(5, ason_get_array_size(&v));
+    const ason_value* arr = ason_get_array_element(&v, 0);
+    EXPECT_EQ_INT(ASON_NULL, ason_get_type(&arr[0]));
+    EXPECT_EQ_INT(ASON_FALSE, ason_get_type(&arr[1]));
+    EXPECT_EQ_INT(ASON_TRUE, ason_get_type(&arr[2]));
+    EXPECT_EQ_INT(ASON_NUMBER, ason_get_type(&arr[3]));
+    EXPECT_EQ_DOUBLE(123.0, ason_get_number(&arr[3]));
+    EXPECT_EQ_INT(ASON_STRING, ason_get_type(&arr[4]));
+    EXPECT_EQ_STRING("abc", ason_get_string(&arr[4]), ason_get_string_length(&arr[4]));
+    ason_free(&v);
+
+    ason_init(&v);
+    EXPECT_EQ_INT(ASON_PARSE_OK, ason_parse(&v, "[ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ]"));
+    EXPECT_EQ_INT(ASON_ARRAY, ason_get_type(&v));
+    EXPECT_EQ_SIZE_T(4, ason_get_array_size(&v));
+    for (i = 0; i < 4; i++) {
+        ason_value* a = ason_get_array_element(&v, i);
+        EXPECT_EQ_INT(ASON_ARRAY, ason_get_type(a));
+        EXPECT_EQ_SIZE_T(i, ason_get_array_size(a));
+        for (j = 0; j < i; j++) {
+            ason_value* e = ason_get_array_element(a, j);
+            EXPECT_EQ_INT(ASON_NUMBER, ason_get_type(e));
+            EXPECT_EQ_DOUBLE((double)j, ason_get_number(e));
+        }
+    }
+    ason_free(&v);
+}
+
 #define TEST_ERROR(error, json) \
     do { \
         ason_value v; \
@@ -144,6 +190,9 @@ static void test_parse_invalid_value() {
     TEST_ERROR(ASON_PARSE_INVALID_VALUE, "inf");
     TEST_ERROR(ASON_PARSE_INVALID_VALUE, "NAN");
     TEST_ERROR(ASON_PARSE_INVALID_VALUE, "nan");
+    /* invalid array */
+    TEST_ERROR(ASON_PARSE_INVALID_VALUE, "[1,]");
+    TEST_ERROR(ASON_PARSE_INVALID_VALUE, "[\"a\", nul]");
 }
 
 static void test_parse_root_not_singular() {
@@ -200,6 +249,13 @@ static void test_parse_invalid_unicode_surrogate() {
     TEST_ERROR(ASON_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\uE000\"");
 }
 
+static void test_parse_miss_comma_or_square_bracket() {
+    TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1");
+    TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1}");
+    TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1 2");
+    TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[[]");
+}
+
 static void test_access_null() {
     ason_value v;
     ason_init(&v);
@@ -245,6 +301,7 @@ static void test_parse() {
     test_parse_true();
     test_parse_number();
     test_parse_string();
+    test_parse_array();
 
     test_parse_expect_value();
     test_parse_invalid_value();

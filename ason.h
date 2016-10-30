@@ -11,16 +11,15 @@ typedef enum {
     ASON_OBJECT
 } ason_type;
 
-typedef struct {
+typedef struct ason_value ason_value;
+struct ason_value {
     union {
-        struct {
-            char* s;
-            size_t len;
-        } str;
+        struct {ason_value* e; size_t size;} arr;
+        struct {char* s; size_t len;} str;
         double num;
     } u;
     ason_type type;
-} ason_value;
+};
 
 enum {
     ASON_PARSE_OK = 0,
@@ -32,7 +31,8 @@ enum {
     ASON_PARSE_INVALID_STRING_ESCAPE,
     ASON_PARSE_INVALID_STRING_CHAR,
     ASON_PARSE_INVALID_UNICODE_HEX,
-    ASON_PARSE_INVALID_UNICODE_SURROGATE
+    ASON_PARSE_INVALID_UNICODE_SURROGATE,
+    ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET
 };
 
 #define ason_init(v) do {(v)->type = ASON_NULL;} while(0)
@@ -54,5 +54,8 @@ void ason_set_number(ason_value* v, double n);
 const char* ason_get_string(const ason_value* v);
 size_t ason_get_string_length(const ason_value* v);
 void ason_set_string(ason_value* v, const char* s, size_t len);
+
+size_t ason_get_array_size(const ason_value* v);
+ason_value* ason_get_array_element(const ason_value* v, size_t index);
 
 #endif

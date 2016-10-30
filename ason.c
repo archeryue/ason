@@ -199,6 +199,53 @@ static int ason_parse_string(ason_context* c, ason_value* v) {
     }
 }
 
+static int ason_parse_value(ason_context* c, ason_value* v);
+
+static int ason_parse_array(ason_context* c, ason_value* v) {
+    size_t size = 0;
+    int ret;
+    EXPECT(c, '[');
+    ason_parse_whitespace(c);
+    if (*c->json == ']') {
+        c->json++;
+        v->type = ASON_ARRAY;
+        v->u.arr.size = size;
+        return ASON_PARSE_OK;
+    }
+    while (1) {
+        ason_value e;
+        ason_init(&e);
+        if ((ret = ason_parse_value(c, &e)) != ASON_PARSE_OK) {
+            ason_context_pop(c, size * sizeof(ason_value));
+            return ret;
+        }
+        memcpy(ason_context_push(c, sizeof(ason_value)), &e, sizeof(ason_value));
+        size++;
+        ason_parse_whitespace(c);
+        if (*c->json == ',') {
+            c->json++;
+            ason_parse_whitespace(c);
+        }
+        else if (*c->json == ']') {
+            c->json++;
+            v->type = ASON_ARRAY;
+            v->u.arr.size = size;
+            size *= sizeof(ason_value);
+            memcpy(v->u.arr.e = (ason_value*)malloc(size), ason_context_pop(c, size), size);
+            return ASON_PARSE_OK;
+        }
+        else {
+            ason_context_pop(c, size * sizeof(ason_value));
+            return ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+        }
+    }
+}
+
+static int ason_parse_object(ason_context* c, ason_value* v) {
+    /* TODO */
+    return 0;
+}
+
 static int ason_parse_value(ason_context* c, ason_value* v) {
     switch(*c->json) {
         case 'n' : return ason_parse_null(c, v);
@@ -206,6 +253,8 @@ static int ason_parse_value(ason_context* c, ason_value* v) {
         case 't' : return ason_parse_true(c, v);
         default  : return ason_parse_number(c, v);
         case '"' : return ason_parse_string(c, v);
+        case '[' : return ason_parse_array(c, v);
+        case '{' : return ason_parse_object(c, v);
         case '\0': return ASON_PARSE_EXPECT_VALUE;
     }
 }
@@ -232,9 +281,21 @@ int ason_parse(ason_value* v, const char* json) {
 }
 
 void ason_free(ason_value* v) {
+    size_t i;
     assert(v != NULL);
-    if (v->type == ASON_STRING)
-        free(v->u.str.s);
+    switch (v->type) {
+        case ASON_STRING:
+            free(v->u.str.s);
+            break;
+        case ASON_ARRAY:
+            for (i = 0; i < v->u.arr.size; i++)
+                ason_free(&v->u.arr.e[i]);
+            if (v->u.arr.size > 0)
+                free(v->u.arr.e);
+            break;
+        default:
+            break;
+    }
     v->type = ASON_NULL;
 }
 
@@ -284,4 +345,15 @@ void ason_set_string(ason_value* v, const char* s, size_t len) {
     v->u.str.s[len] = '\0';
     v->u.str.len = len;
     v->type = ASON_STRING;
+}
+
+size_t ason_get_array_size(const ason_value* v) {
+    assert(v != NULL && v->type == ASON_ARRAY);
+    return v->u.arr.size;
+}
+
+ason_value* ason_get_array_element(const ason_value* v, size_t index) {
+    assert(v != NULL && v->type == ASON_ARRAY);
+    assert(index >=0 && index < v->u.arr.size);
+    return v->u.arr.e + index;
 }
