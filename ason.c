@@ -9,8 +9,6 @@
 #define ASON_PARSE_STACK_INIT_SIZE 256
 #endif
 
-#define EXPECT(c, ch) do { assert(*c->json == ch); c->json++; } while (0)
-
 typedef struct {
     const char* json;
     char* stack;
@@ -37,6 +35,8 @@ static void* ason_context_pop(ason_context* c, size_t size) {
     c->top -= size;
     return c->stack + c->top;
 }
+
+#define EXPECT(c, ch) do { assert(*c->json == ch); c->json++; } while (0)
 
 static void ason_parse_whitespace(ason_context* c) {
     const char* p = c->json;
