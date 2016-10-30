@@ -171,6 +171,8 @@ static int ason_parse_string(ason_context* c, ason_value* v) {
                     case 'u':
                         if (!(p = ason_parse_hex4(p, &u)))
                             STRING_ERROR(ASON_PARSE_INVALID_UNICODE_HEX);
+                        if (u >= 0xDC00 && u <= 0xDFFF)
+                            STRING_ERROR(ASON_PARSE_INVALID_UNICODE_SURROGATE);
                         if (u >= 0xD800 && u <= 0xDBFF) { /* surrogate pair */
                             if (*p != '\\' || *(p+1) != 'u')
                                 STRING_ERROR(ASON_PARSE_INVALID_UNICODE_SURROGATE);
