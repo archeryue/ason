@@ -12,13 +12,40 @@ typedef enum {
 } ason_type;
 
 typedef struct ason_value ason_value;
+typedef struct ason_entry ason_entry;
+
+typedef struct {
+    double d;
+} ason_number;
+
+typedef struct {
+    char* s;
+    size_t len;
+} ason_string;
+
+typedef struct {
+    ason_value* m;
+    size_t size;
+} ason_array;
+
+typedef struct {
+    ason_entry* e;
+    size_t size;
+} ason_object;
+
 struct ason_value {
     union {
-        struct {ason_value* e; size_t size;} arr;
-        struct {char* s; size_t len;} str;
-        double num;
+        ason_number num;
+        ason_string str;
+        ason_array  arr;
+        ason_object obj;
     } u;
     ason_type type;
+};
+
+struct ason_entry {
+    ason_string k;
+    ason_value v;
 };
 
 enum {
@@ -32,7 +59,10 @@ enum {
     ASON_PARSE_INVALID_STRING_CHAR,
     ASON_PARSE_INVALID_UNICODE_HEX,
     ASON_PARSE_INVALID_UNICODE_SURROGATE,
-    ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET
+    ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET,
+    ASON_PARSE_MISS_KEY,
+    ASON_PARSE_MISS_COLON,
+    ASON_PARSE_MISS_COMMA_OR_CURLY_BRACKET
 };
 
 #define ason_init(v) do {(v)->type = ASON_NULL;} while(0)
@@ -53,9 +83,15 @@ void ason_set_number(ason_value* v, double n);
 
 const char* ason_get_string(const ason_value* v);
 size_t ason_get_string_length(const ason_value* v);
+void ason_new_string(ason_string* str, const char* s, size_t len);
 void ason_set_string(ason_value* v, const char* s, size_t len);
 
 size_t ason_get_array_size(const ason_value* v);
 ason_value* ason_get_array_element(const ason_value* v, size_t index);
+
+size_t ason_get_object_entry_size(const ason_value* v);
+const char* ason_get_object_key(const ason_value* v, size_t index);
+size_t ason_get_object_key_length(const ason_value* v, size_t index);
+ason_value* ason_get_object_value(const ason_value* v, size_t index);
 
 #endif

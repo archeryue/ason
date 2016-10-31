@@ -163,6 +163,66 @@ static void test_parse_array() {
     ason_free(&v);
 }
 
+static void test_parse_object() {
+    ason_value v;
+    size_t i;
+
+    ason_init(&v);
+    EXPECT_EQ_INT(ASON_PARSE_OK, ason_parse(&v, " { } "));
+    EXPECT_EQ_INT(ASON_OBJECT, ason_get_type(&v));
+    EXPECT_EQ_SIZE_T(0, ason_get_object_entry_size(&v));
+    ason_free(&v);
+
+    ason_init(&v);
+    EXPECT_EQ_INT(ASON_PARSE_OK, ason_parse(&v,
+        " { "
+        "\"n\" : null , "
+        "\"f\" : false , "
+        "\"t\" : true , "
+        "\"i\" : 123 , "
+        "\"s\" : \"abc\", "
+        "\"a\" : [ 1, 2, 3 ],"
+        "\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }"
+        " } "
+    ));
+    EXPECT_EQ_INT(ASON_OBJECT, ason_get_type(&v));
+    EXPECT_EQ_SIZE_T(7, ason_get_object_entry_size(&v));
+    EXPECT_EQ_STRING("n", ason_get_object_key(&v, 0), ason_get_object_key_length(&v, 0));
+    EXPECT_EQ_INT(ASON_NULL,   ason_get_type(ason_get_object_value(&v, 0)));
+    EXPECT_EQ_STRING("f", ason_get_object_key(&v, 1), ason_get_object_key_length(&v, 1));
+    EXPECT_EQ_INT(ASON_FALSE,  ason_get_type(ason_get_object_value(&v, 1)));
+    EXPECT_EQ_STRING("t", ason_get_object_key(&v, 2), ason_get_object_key_length(&v, 2));
+    EXPECT_EQ_INT(ASON_TRUE,   ason_get_type(ason_get_object_value(&v, 2)));
+    EXPECT_EQ_STRING("i", ason_get_object_key(&v, 3), ason_get_object_key_length(&v, 3));
+    EXPECT_EQ_INT(ASON_NUMBER, ason_get_type(ason_get_object_value(&v, 3)));
+    EXPECT_EQ_DOUBLE(123.0, ason_get_number(ason_get_object_value(&v, 3)));
+    EXPECT_EQ_STRING("s", ason_get_object_key(&v, 4), ason_get_object_key_length(&v, 4));
+    EXPECT_EQ_INT(ASON_STRING, ason_get_type(ason_get_object_value(&v, 4)));
+    EXPECT_EQ_STRING("abc", ason_get_string(ason_get_object_value(&v, 4)), ason_get_string_length(ason_get_object_value(&v, 4)));
+    EXPECT_EQ_STRING("a", ason_get_object_key(&v, 5), ason_get_object_key_length(&v, 5));
+    EXPECT_EQ_INT(ASON_ARRAY, ason_get_type(ason_get_object_value(&v, 5)));
+    EXPECT_EQ_SIZE_T(3, ason_get_array_size(ason_get_object_value(&v, 5)));
+    for (i = 0; i < 3; i++) {
+        ason_value* m = ason_get_array_element(ason_get_object_value(&v, 5), i);
+        EXPECT_EQ_INT(ASON_NUMBER, ason_get_type(m));
+        EXPECT_EQ_DOUBLE(i + 1.0, ason_get_number(m));
+    }
+    EXPECT_EQ_STRING("o", ason_get_object_key(&v, 6), ason_get_object_key_length(&v, 6));
+    {
+        ason_value* o = ason_get_object_value(&v, 6);
+        EXPECT_EQ_INT(ASON_OBJECT, ason_get_type(o));
+        EXPECT_EQ_SIZE_T(3, ason_get_object_entry_size(o));
+        for (i = 0; i < 3; i++) {
+            ason_value* ov = ason_get_object_value(o, i);
+            EXPECT_TRUE('1' + i == ason_get_object_key(o, i)[0]);
+            EXPECT_EQ_SIZE_T(1, ason_get_object_key_length(o, i));
+            EXPECT_EQ_INT(ASON_NUMBER, ason_get_type(ov));
+            EXPECT_EQ_DOUBLE(i + 1.0, ason_get_number(ov));
+        }
+    }
+    ason_free(&v);
+}
+
 #define TEST_ERROR(error, json) \
     do { \
         ason_value v; \
@@ -193,6 +253,9 @@ static void test_parse_invalid_value() {
     /* invalid array */
     TEST_ERROR(ASON_PARSE_INVALID_VALUE, "[1,]");
     TEST_ERROR(ASON_PARSE_INVALID_VALUE, "[\"a\", nul]");
+    /* invalid object */
+    TEST_ERROR(ASON_PARSE_INVALID_VALUE, "{\"a\":}");
+    TEST_ERROR(ASON_PARSE_INVALID_VALUE, "{\"a\": tru}");
 }
 
 static void test_parse_root_not_singular() {
@@ -208,7 +271,7 @@ static void test_parse_number_too_big() {
     TEST_ERROR(ASON_PARSE_NUMBER_TOO_BIG, "-1e309");
 }
 
-static void test_parse_missing_quotation_mark() {
+static void test_parse_miss_quotation_mark() {
     TEST_ERROR(ASON_PARSE_MISS_QUOTATION_MARK, "\"");
     TEST_ERROR(ASON_PARSE_MISS_QUOTATION_MARK, "\"abc");
 }
@@ -254,6 +317,29 @@ static void test_parse_miss_comma_or_square_bracket() {
     TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1}");
     TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1 2");
     TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[[]");
+}
+
+static void test_parse_miss_key() {
+    TEST_ERROR(ASON_PARSE_MISS_KEY, "{:1,");
+    TEST_ERROR(ASON_PARSE_MISS_KEY, "{1:1,");
+    TEST_ERROR(ASON_PARSE_MISS_KEY, "{true:1,");
+    TEST_ERROR(ASON_PARSE_MISS_KEY, "{false:1,");
+    TEST_ERROR(ASON_PARSE_MISS_KEY, "{null:1,");
+    TEST_ERROR(ASON_PARSE_MISS_KEY, "{[]:1,");
+    TEST_ERROR(ASON_PARSE_MISS_KEY, "{{}:1,");
+    TEST_ERROR(ASON_PARSE_MISS_KEY, "{\"a\":1,");
+}
+
+static void test_parse_miss_colon() {
+    TEST_ERROR(ASON_PARSE_MISS_COLON, "{\"a\"}");
+    TEST_ERROR(ASON_PARSE_MISS_COLON, "{\"a\",\"b\"}");
+}
+
+static void test_parse_miss_comma_or_curly_bracket() {
+    TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1");
+    TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1]");
+    TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1 \"b\"");
+    TEST_ERROR(ASON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":{}");
 }
 
 static void test_access_null() {
@@ -302,16 +388,20 @@ static void test_parse() {
     test_parse_number();
     test_parse_string();
     test_parse_array();
+    test_parse_object();
 
     test_parse_expect_value();
     test_parse_invalid_value();
     test_parse_root_not_singular();
     test_parse_number_too_big();
-    test_parse_missing_quotation_mark();
+    test_parse_miss_quotation_mark();
     test_parse_invalid_string_escape();
     test_parse_invalid_string_char();
     test_parse_invalid_unicode_hex();
     test_parse_invalid_unicode_surrogate();
+    test_parse_miss_key();
+    test_parse_miss_colon();
+    test_parse_miss_comma_or_curly_bracket();
 }
 
 static void test_access() {

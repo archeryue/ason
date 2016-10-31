@@ -98,8 +98,8 @@ static int ason_parse_number(ason_context* c, ason_value* v) {
         for (p++; ISDIGIT(*p); p++);
     }
     errno = 0;
-    v->u.num = strtod(c->json, NULL);
-    if (errno == ERANGE && (v->u.num == HUGE_VAL || v->u.num == -HUGE_VAL)) {
+    v->u.num.d = strtod(c->json, NULL);
+    if (errno == ERANGE && (v->u.num.d == HUGE_VAL || v->u.num.d == -HUGE_VAL)) {
         return ASON_PARSE_NUMBER_TOO_BIG;
     }
     c->json = p;
@@ -145,7 +145,7 @@ static void ason_encode_utf8(ason_context* c, unsigned u) {
     }
 }
 
-static int ason_parse_string(ason_context* c, ason_value* v) {
+static int _ason_parse_string(ason_context* c, ason_string* s) {
     size_t head = c->top, len;
     unsigned u,ul;
     EXPECT(c, '"');
@@ -155,10 +155,11 @@ static int ason_parse_string(ason_context* c, ason_value* v) {
         switch (ch) {
             case '"':
                 len = c->top - head;
-                ason_set_string(v, (char*)ason_context_pop(c, len), len);
+                ason_new_string(s, (char*)ason_context_pop(c, len), len);
                 c->json = p;
                 return ASON_PARSE_OK;
             case '\\':
+                /* parse unicode */
                 switch (*p++) {
                     case '\\': PUTC(c, '\\'); break;
                     case '"' : PUTC(c, '"' ); break;
@@ -173,7 +174,8 @@ static int ason_parse_string(ason_context* c, ason_value* v) {
                             STRING_ERROR(ASON_PARSE_INVALID_UNICODE_HEX);
                         if (u >= 0xDC00 && u <= 0xDFFF)
                             STRING_ERROR(ASON_PARSE_INVALID_UNICODE_SURROGATE);
-                        if (u >= 0xD800 && u <= 0xDBFF) { /* surrogate pair */
+                        /* surrogate pair */
+                        if (u >= 0xD800 && u <= 0xDBFF) {
                             if (*p != '\\' || *(p+1) != 'u')
                                 STRING_ERROR(ASON_PARSE_INVALID_UNICODE_SURROGATE);
                             p+=2;
@@ -199,11 +201,24 @@ static int ason_parse_string(ason_context* c, ason_value* v) {
     }
 }
 
+static int ason_parse_string(ason_context* c, ason_value* v) {
+    int ret;
+    if ((ret = _ason_parse_string(c, &v->u.str)) == ASON_PARSE_OK)
+        v->type = ASON_STRING;
+    return ret;
+}
+
 static int ason_parse_value(ason_context* c, ason_value* v);
 
+static void _ason_free_value(ason_value* m, size_t size) {
+    size_t i = 0;
+    for (i = 0; i < size; i++)
+        ason_free(&m[i]);
+}
+
 static int ason_parse_array(ason_context* c, ason_value* v) {
-    size_t size = 0;
     int ret;
+    size_t size = 0;
     EXPECT(c, '[');
     ason_parse_whitespace(c);
     if (*c->json == ']') {
@@ -212,15 +227,17 @@ static int ason_parse_array(ason_context* c, ason_value* v) {
         v->u.arr.size = size;
         return ASON_PARSE_OK;
     }
+    ason_value m;
     while (1) {
-        ason_value e;
-        ason_init(&e);
-        if ((ret = ason_parse_value(c, &e)) != ASON_PARSE_OK) {
-            ason_context_pop(c, size * sizeof(ason_value));
+        /* parse member */
+        ason_init(&m);
+        if ((ret = ason_parse_value(c, &m)) != ASON_PARSE_OK) {
+            _ason_free_value((ason_value*)ason_context_pop(c, size * sizeof(ason_value)), size);
             return ret;
         }
-        memcpy(ason_context_push(c, sizeof(ason_value)), &e, sizeof(ason_value));
+        memcpy(ason_context_push(c, sizeof(ason_value)), &m, sizeof(ason_value));
         size++;
+        /* parse comma or bracket */
         ason_parse_whitespace(c);
         if (*c->json == ',') {
             c->json++;
@@ -231,23 +248,84 @@ static int ason_parse_array(ason_context* c, ason_value* v) {
             v->type = ASON_ARRAY;
             v->u.arr.size = size;
             size *= sizeof(ason_value);
-            memcpy(v->u.arr.e = (ason_value*)malloc(size), ason_context_pop(c, size), size);
+            memcpy(v->u.arr.m = (ason_value*)malloc(size), ason_context_pop(c, size), size);
             return ASON_PARSE_OK;
         }
         else {
-            ason_context_pop(c, size * sizeof(ason_value));
+            _ason_free_value((ason_value*)ason_context_pop(c, size * sizeof(ason_value)), size);
             return ASON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
         }
     }
 }
 
+static void _ason_free_entry(ason_entry* e, size_t size) {
+    size_t i = 0;
+    for (i = 0; i < size; i++)
+        free(e[i].k.s);
+}
+
 static int ason_parse_object(ason_context* c, ason_value* v) {
-    /* TODO */
-    return 0;
+    int ret;
+    size_t size = 0;
+    EXPECT(c, '{');
+    ason_parse_whitespace(c);
+    if (*c->json == '}') {
+        c->json++;
+        v->type = ASON_OBJECT;
+        v->u.obj.e = NULL;
+        v->u.obj.size = size;
+        return ASON_PARSE_OK;
+    }
+    ason_entry e;
+    while (1) {
+        /* parse key */
+        if (*c->json != '"' || _ason_parse_string(c, &e.k) != ASON_PARSE_OK) {
+            _ason_free_entry((ason_entry*)ason_context_pop(c, size * sizeof(ason_entry)), size);
+            return ASON_PARSE_MISS_KEY;
+        }
+        /* parse colon */
+        ason_parse_whitespace(c);
+        if (*c->json == ':') {
+            c->json++;
+            ason_parse_whitespace(c);
+        }
+        else {
+            free(e.k.s);
+            _ason_free_entry((ason_entry*)ason_context_pop(c, size * sizeof(ason_entry)), size);
+            return ASON_PARSE_MISS_COLON;
+        }
+        /* parse value */
+        ason_init(&e.v);
+        if ((ret = ason_parse_value(c, &e.v)) != ASON_PARSE_OK) {
+            free(e.k.s);
+            _ason_free_entry((ason_entry*)ason_context_pop(c, size * sizeof(ason_entry)), size);
+            return ret;
+        }
+        memcpy(ason_context_push(c, sizeof(ason_entry)), &e, sizeof(ason_entry));
+        size++;
+        /* parse comma or bracket */
+        ason_parse_whitespace(c);
+        if (*c->json == ',') {
+            c->json++;
+            ason_parse_whitespace(c);
+        }
+        else if (*c->json == '}') {
+            c->json++;
+            v->type = ASON_OBJECT;
+            v->u.obj.size = size;
+            size *= sizeof(ason_entry);
+            memcpy(v->u.obj.e = (ason_entry*)malloc(size), ason_context_pop(c, size), size);
+            return ASON_PARSE_OK;
+        }
+        else {
+            _ason_free_entry((ason_entry*)ason_context_pop(c, size * sizeof(ason_entry)), size);
+            return ASON_PARSE_MISS_COMMA_OR_CURLY_BRACKET;
+        }
+    }
 }
 
 static int ason_parse_value(ason_context* c, ason_value* v) {
-    switch(*c->json) {
+    switch (*c->json) {
         case 'n' : return ason_parse_null(c, v);
         case 'f' : return ason_parse_false(c, v);
         case 't' : return ason_parse_true(c, v);
@@ -289,9 +367,17 @@ void ason_free(ason_value* v) {
             break;
         case ASON_ARRAY:
             for (i = 0; i < v->u.arr.size; i++)
-                ason_free(&v->u.arr.e[i]);
+                ason_free(&v->u.arr.m[i]);
             if (v->u.arr.size > 0)
-                free(v->u.arr.e);
+                free(v->u.arr.m);
+            break;
+        case ASON_OBJECT:
+            for (i = 0; i < v->u.obj.size; i++) {
+                ason_free(&v->u.obj.e[i].v);
+                free(v->u.obj.e[i].k.s);
+            }
+            if (v->u.obj.size > 0)
+                free(v->u.obj.e);
             break;
         default:
             break;
@@ -317,13 +403,13 @@ void ason_set_boolean(ason_value* v, int b) {
 
 double ason_get_number(const ason_value* v) {
     assert(v != NULL && v->type == ASON_NUMBER);
-    return v->u.num;
+    return v->u.num.d;
 }
 
 void ason_set_number(ason_value* v, double n) {
     assert(v != NULL);
     ason_free(v);
-    v->u.num = n;
+    v->u.num.d = n;
     v->type = ASON_NUMBER;
 }
 
@@ -337,13 +423,18 @@ size_t ason_get_string_length(const ason_value* v) {
     return v->u.str.len;
 }
 
+void ason_new_string(ason_string* str, const char* s, size_t len) {
+    assert(str != NULL && (s != NULL || len == 0));
+    str->s = (char*)malloc(len+1);
+    memcpy(str->s, s, len);
+    str->s[len] = '\0';
+    str->len = len;
+}
+
 void ason_set_string(ason_value* v, const char* s, size_t len) {
     assert(v != NULL && (s != NULL || len == 0));
     ason_free(v);
-    v->u.str.s = (char*)malloc(len+1);
-    memcpy(v->u.str.s, s, len);
-    v->u.str.s[len] = '\0';
-    v->u.str.len = len;
+    ason_new_string(&v->u.str, s, len);
     v->type = ASON_STRING;
 }
 
@@ -355,5 +446,28 @@ size_t ason_get_array_size(const ason_value* v) {
 ason_value* ason_get_array_element(const ason_value* v, size_t index) {
     assert(v != NULL && v->type == ASON_ARRAY);
     assert(index >=0 && index < v->u.arr.size);
-    return v->u.arr.e + index;
+    return v->u.arr.m + index;
+}
+
+size_t ason_get_object_entry_size(const ason_value* v) {
+    assert(v != NULL && v->type == ASON_OBJECT);
+    return v->u.obj.size;
+}
+
+const char* ason_get_object_key(const ason_value* v, size_t index) {
+    assert(v != NULL && v->type == ASON_OBJECT);
+    assert(index >=0 && index < v->u.obj.size);
+    return v->u.obj.e[index].k.s;
+}
+
+size_t ason_get_object_key_length(const ason_value* v, size_t index) {
+    assert(v != NULL && v->type == ASON_OBJECT);
+    assert(index >=0 && index < v->u.obj.size);
+    return v->u.obj.e[index].k.len;
+}
+
+ason_value* ason_get_object_value(const ason_value* v, size_t index) {
+    assert(v != NULL && v->type == ASON_OBJECT);
+    assert(index >=0 && index < v->u.obj.size);
+    return &v->u.obj.e[index].v;
 }
