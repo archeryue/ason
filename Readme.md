@@ -1,5 +1,5 @@
 <h1> Introduction </h1>
-<p> ASON is a light weight c JSON lib. </p>
+<p> ASON is a lightweight c JSON lib, Only support Linux/OS X. </p>
 
 <h1> Compile </h1>
 <p> mkdir build </p>
